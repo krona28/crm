@@ -1,10 +1,11 @@
 // Карточка заказа: этапы, детали с правкой на месте, клиент и сообщения, деньги, задачи, фото, история, бланк в цех.
 import {store} from '../store.js';
 import {$, $$, esc, attr, ic, avatar, thumb, due, pname, paidSum, woodChip, toast, fail, modal, confirmBox, empty, fillTemplate} from '../ui.js';
-import {STAGES, GROUPS, CATS, WOODS, ITEMS, SOURCES, PAY_KINDS, stage, stageIdx, isActive, money, dmy, ago, daysTo, phoneDigits, phoneNice, item, today, plural} from '../const.js';
+import {DEFAULT_SETTINGS, STAGES, GROUPS, CATS, WOODS, ITEMS, SOURCES, PAY_KINDS, stage, stageIdx, isActive, money, dmy, ago, daysTo, phoneDigits, phoneNice, item, today, plural} from '../const.js';
 import {paymentForm, taskForm, clientForm} from './forms.js';
 import {taskRow, bindTasks} from './today.js';
 import {moveStage} from './orders.js';
+import {CLIENT_PAGE} from '../config.js';
 
 export const title = r => { const o = store.get('orders', r.args[0]); return o ? `Заказ №${o.num}` : 'Заказ'; };
 const sel = (name, list, v) => `<select data-f="${name}">${list.map(([k, t]) => `<option value="${attr(k)}" ${String(k) === String(v ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
@@ -48,11 +49,13 @@ export function render({args: [id]}){
   <section class="stepper">${STAGES.slice(0, -1).map((s, i) => `<button class="step ${i < idx && active ? 'past' : ''} ${s.id === o.stage ? 'cur' : ''} g-${s.group}" data-stage="${s.id}" title="${GROUPS[s.group]}"><i></i><span>${esc(s.name)}</span></button>`).join('')}</section>
   <div class="step-act">
     ${o.stage === 'lost' ? `<span class="pill st-closed">Отказ</span><button class="btn ghost sm" data-stage="lead">Вернуть в работу</button>` :
+      o.stage === 'lead' ? `<button class="btn" data-stage="calc">${ic('check')}Подтвердить заявку</button>` :
       next && next.id !== 'lost' ? `<button class="btn" data-stage="${next.id}">${next.id === 'done' ? ic('check') + 'Заказ сдан' : 'Дальше: ' + esc(next.name)} ${next.id !== 'done' ? ic('chevron') : ''}</button>` :
       o.stage === 'done' ? `<span class="pill st-work">Сдан ${dmy(o.stage_at)}</span>` : ''}
     ${active && stage(o.stage).group === 'sale' ? `<button class="linkbtn dim" data-stage="lost">Клиент отказался</button>` : ''}
-    <span class="muted small">На этапе с ${dmy(o.stage_at)}</span>
+    <span class="muted small">${o.stage === 'lead' ? 'Созвонитесь с клиентом, уточните детали и подтвердите — он увидит это на странице заказа' : 'На этапе с ' + dmy(o.stage_at)}</span>
   </div>
+  ${o.client_ok === true ? `<div class="client-said ok">${ic('check')}Клиент посмотрел фото: всё нравится, можно упаковывать</div>` : o.client_ok === false ? `<div class="client-said">${ic('alert')}Клиент задал вопрос по фото — смотрите историю ниже</div>` : ''}
 
   <div class="o-grid">
     <div class="col">
@@ -69,7 +72,8 @@ export function render({args: [id]}){
           <label class="f"><span class="lbl">Откуда пришёл</span>${sel('source', SOURCES.map(s => [s, s]), o.source)}</label>
           ${store.boss ? `<label class="f"><span class="lbl">Дизайнер</span>${sel('designer_id', [['', '— без дизайнера —'], ...store.t('designers').map(d => [d.id, d.name])], o.designer_id)}</label>` : ''}
           <label class="f"><span class="lbl">Доставка и монтаж</span><input data-f="delivery" value="${attr(o.delivery)}" placeholder="ТК во Владивосток, монтаж наш"></label>
-          <label class="f full"><span class="lbl">Заметки для цеха</span><textarea data-f="notes" rows="3" placeholder="Всё, что важно мастеру: рисунок, тон, нюансы">${esc(o.notes)}</textarea></label>
+          <label class="f full"><span class="lbl">Пожелания клиента <i class="muted">— их видит клиент</i></span><textarea data-f="wishes" rows="2" placeholder="Что хочет клиент: форма, тон, где будет стоять">${esc(o.wishes || '')}</textarea></label>
+          <label class="f full"><span class="lbl">Заметки для цеха <i class="muted">— клиент не видит</i></span><textarea data-f="notes" rows="3" placeholder="Всё, что важно мастеру: рисунок, тон, нюансы">${esc(o.notes)}</textarea></label>
         </div>
         ${it ? `<a class="site-link" href="https://krona28.github.io/collection/${it.id}/" target="_blank" rel="noopener">${ic('eye')}Образец «${esc(it.name)}» на сайте${it.size ? ` · ${esc(it.size)}` : ''}</a>` : ''}
       </section>
@@ -77,14 +81,14 @@ export function render({args: [id]}){
       <section class="card">
         <div class="card-h"><h3>${ic('camera')}Фото <span class="count">${photos.length || ''}</span></h3>
           <div class="row gap"><label class="btn ghost sm">${ic('camera')}Снять / добавить<input type="file" accept="image/*" multiple id="up" hidden></label></div></div>
-        ${photos.length ? `<div class="photos">${photos.map(p => `<button class="ph" data-ph="${p.id}"><img data-src="${p.id}" alt="${attr(p.caption)}"><small>${ago(p.created_at)}</small></button>`).join('')}</div>`
+        ${photos.length ? `<div class="photos">${photos.map(p => `<button class="ph" data-ph="${p.id}"><img data-src="${p.id}" alt="${attr(p.caption)}">${p.for_client ? `<span class="ph-client" title="Видит клиент">${ic('eye')}</span>` : ''}<small>${ago(p.created_at)}</small></button>`).join('')}</div>`
           : `<label class="drop">${ic('camera')}<b>Добавьте фото процесса</b><span>Подбор доски, заготовки, готовое изделие — клиенту можно будет отправить прямо отсюда.</span><input type="file" accept="image/*" multiple id="up2" hidden></label>`}
       </section>
 
       <section class="card">
         <div class="card-h"><h3>${ic('note')}История и комментарии</h3></div>
         <form class="comment" id="cmt"><textarea name="t" rows="1" placeholder="Комментарий: что сделано, что сказал клиент…"></textarea><button class="btn sm">Добавить</button></form>
-        <div class="feed">${evs.map(e => `<div class="ev ev-${e.type}">${avatar(e.author_id, 'sm')}<span><b>${esc(pname(e.author_id) || 'Система')}</b><p>${esc(e.text)}</p><small>${ago(e.created_at)}</small></span></div>`).join('')}</div>
+        <div class="feed">${evs.map(e => `<div class="ev ev-${e.type}">${avatar(e.author_id, 'sm')}<span><b>${esc(e.type === 'client' ? 'Клиент' : pname(e.author_id) || 'Система')}</b><p>${esc(e.text.replace(/^Клиент: /, ''))}</p><small>${ago(e.created_at)}</small></span></div>`).join('')}</div>
       </section>
     </div>
 
@@ -97,6 +101,9 @@ export function render({args: [id]}){
           <div class="contact-btns">
             ${c.phone ? `<a class="btn ghost sm" href="tel:+${wa}">${ic('phone')}Позвонить</a><a class="btn ghost sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">${ic('wa')}WhatsApp</a>` : ''}
           </div>
+          ${o.token ? `<div class="track"><span class="lbl">Страница заказа для клиента</span>
+            <p class="small muted">Клиент видит по ссылке этапы, срок${store.boss ? ', цену и оплату' : ''} и фото с пометкой «видит клиент». Входить никуда не нужно.</p>
+            <div class="row gap wrap"><a class="btn ghost sm" href="${CLIENT_PAGE + o.token}" target="_blank" rel="noopener">${ic('eye')}Открыть</a><button class="btn ghost sm" id="copy-track">${ic('copy')}Ссылка</button>${c.phone ? `<button class="btn ghost sm" data-tpl="track">${ic('wa')}Отправить</button>` : ''}</div></div>` : ''}
           ${c.phone ? `<div class="tpl"><span class="lbl">Написать по шаблону</span><div class="tpl-list">${tpl.map(t => `<button class="chip" data-tpl="${attr(t.id)}">${esc(t.name)}</button>`).join('')}</div></div>` : ''}` : '<p class="muted">Клиент не указан.</p>'}
       </section>
 
@@ -181,6 +188,9 @@ export function bind(root, {args: [id]}){
       toast('Оплата удалена', () => store.insert('payments', p));
     }
   });
+  root.querySelector('#copy-track')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(CLIENT_PAGE + o.token); toast('Ссылка для клиента скопирована'); } catch (x) { toast(CLIENT_PAGE + o.token); }
+  });
   root.querySelector('#prio').onclick = () => store.update('orders', o.id, {priority: !o.priority}).catch(fail);
   root.querySelector('#print').onclick = () => print();
   root.querySelector('#pay')?.addEventListener('click', () => paymentForm(store.get('orders', id)));
@@ -207,7 +217,7 @@ export function bind(root, {args: [id]}){
 }
 
 function sendTemplate(o, tid){
-  const t = store.settings.templates.find(x => x.id === tid); if (!t) return;
+  const t = store.settings.templates.find(x => x.id === tid) || DEFAULT_SETTINGS.templates.find(x => x.id === tid); if (!t) return;
   const c = store.get('clients', o.client_id);
   const m = modal(`<div class="form">
     <div class="modal-head"><h2>${esc(t.name)}</h2><button type="button" class="icon-btn" data-close>${ic('x')}</button></div>
@@ -225,7 +235,7 @@ function sendTemplate(o, tid){
 async function viewPhoto(p){
   const url = await store.photoUrl(p);
   const m = modal(`<div class="photo-view"><img src="${attr(url)}" alt="">
-    <div class="row between gap"><span class="muted small">${ago(p.created_at)}</span><div class="row gap">
+    <div class="row between gap wrap"><label class="switch"><input type="checkbox" id="for-client" ${p.for_client ? 'checked' : ''}><i></i>Показать клиенту на странице заказа</label><div class="row gap">
       <button class="btn ghost sm" id="del-ph">${ic('trash')}Удалить</button>
       <button class="btn sm" id="share">${ic('share')}Отправить клиенту</button></div></div></div>`, {wide: true});
   m.el.querySelector('#share').onclick = async () => {
@@ -235,6 +245,10 @@ async function viewPhoto(p){
       if (navigator.canShare?.({files: [file]})) await navigator.share({files: [file], title: 'Мастерская «Крона»'});
       else { const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(blob), download: file.name}); a.click(); toast('Фото скачано — отправьте его в мессенджере'); }
     } catch (e) { if (e.name !== 'AbortError') fail(e); }
+  };
+  m.el.querySelector('#for-client').onchange = e => {
+    store.update('photos', p.id, {for_client: e.target.checked}).catch(fail);
+    toast(e.target.checked ? 'Клиент увидит это фото' : 'Фото скрыто от клиента');
   };
   m.el.querySelector('#del-ph').onclick = async () => { if (await confirmBox('Удалить фото?')) { m.close(); store.removePhoto(p).catch(fail); } };
 }

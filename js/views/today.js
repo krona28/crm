@@ -2,7 +2,9 @@
 import {store} from '../store.js';
 import {esc, ic, avatar, thumb, due, cname, pname, stagePill, paidSum, empty, toast, fail} from '../ui.js';
 import {isActive, inWork, stage, daysTo, daysSince, money, short, ago, dmy, today, plural, phoneNice} from '../const.js';
-import {newOrder, taskForm} from './forms.js';
+import {taskForm} from './forms.js';
+import {moveStage} from './orders.js';
+import {WOODS, phoneDigits} from '../const.js';
 
 export const title = 'Сегодня';
 let allTasks = false;
@@ -18,6 +20,8 @@ function attention(){
     if (st.group === 'work' && stuck >= 7) out.push([3, o, 'stuck', `${stuck} дн на этапе «${st.name}»`]);
     if (st.group === 'work' && !o.assignee_id) out.push([3, o, 'who', 'В цеху без мастера']);
     if (o.stage === 'lead' && daysSince(o.created_at) >= 1) out.push([2, o, 'lead', `Заявка без ответа ${daysSince(o.created_at)} дн`]);
+    if (o.client_ok === false) out.push([1, o, 'wait', 'Клиент задал вопрос по фото']);
+    if (o.client_ok === true && o.stage === 'approve') out.push([1, o, 'pay', 'Клиент одобрил — можно упаковывать']);
   }
   return out.sort((a, b) => a[0] - b[0]);
 }
@@ -47,7 +51,7 @@ export function render(){
 
   const tasks = store.t('tasks').filter(t => !t.done && (allTasks || t.assignee_id === me.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
   const att = attention().filter(([, o]) => store.role !== 'master' || o.assignee_id === me.id);
-  const inbox = store.t('inbox').filter(i => !i.handled).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const leads = store.role === 'master' ? [] : os.filter(o => o.stage === 'lead').sort((a, b) => b.created_at.localeCompare(a.created_at));
   const masters = store.t('profiles').filter(p => p.role === 'master' || (p.role === 'owner' && active.some(o => o.assignee_id === p.id && inWork(o))));
   const events = store.t('events').slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 12);
 
@@ -55,7 +59,7 @@ export function render(){
   <section class="hero">
     <div>
       <div class="eyebrow">${d.toLocaleDateString('ru-RU', {weekday: 'long', day: 'numeric', month: 'long'})}</div>
-      <h2>${hello}, <em>${esc(me.name.split(' ')[0] === 'Андрей' ? me.name : me.name.split(' ')[0])}</em></h2>
+      <h2>${hello}, <em>${esc(me.name)}</em></h2>
       <p class="muted">${work.length ? `В цеху ${work.length} ${plural(work.length, 'заказ', 'заказа', 'заказов')}` : 'В цеху пока пусто'}${week.length ? `, на этой неделе сдаём ${week.length}` : ''}${late.length ? `. <span class="late-t">Просрочено: ${late.length}</span>` : '.'}</p>
     </div>
   </section>
@@ -68,16 +72,17 @@ export function render(){
 
   <div class="cols">
     <div class="col">
-      ${inbox.length ? `<section class="card">
-        <div class="card-h"><h3>${ic('inbox')}Новые заявки с сайта <span class="count">${inbox.length}</span></h3></div>
-        <div class="list">${inbox.map(i => `
+      ${leads.length ? `<section class="card leads-card">
+        <div class="card-h"><h3>${ic('inbox')}Новые заявки <span class="count">${leads.length}</span></h3><span class="muted small">созвонитесь и подтвердите</span></div>
+        <div class="list">${leads.map(o => { const c = store.get('clients', o.client_id) || {}; return `
           <div class="lead">
-            <div class="grow"><b>${esc(i.name || 'Без имени')}</b> · <a href="tel:${esc(i.phone)}">${esc(phoneNice(i.phone))}</a>
-              <p>${esc([i.kind, i.model, i.wood !== 'Подскажите' ? i.wood : '', i.size, i.city].filter(Boolean).join(' · '))}</p>
-              ${i.msg ? `<p class="muted">«${esc(i.msg)}»</p>` : ''}
-              <small class="muted">${ago(i.created_at)}</small></div>
-            <div class="lead-act"><button class="btn sm" data-take="${i.id}">В работу</button><button class="linkbtn dim" data-hide="${i.id}">Скрыть</button></div>
-          </div>`).join('')}</div>
+            ${thumb(o, 'sm')}
+            <div class="grow"><a href="#/order/${o.id}"><b>${esc(c.name || 'Без имени')}</b> · №${o.num} ${esc(o.title)}</a>
+              <p>${esc([WOODS[o.wood], o.size, c.city].filter(Boolean).join(' · '))}${c.phone ? ` · <a class="gold" href="tel:+${phoneDigits(c.phone)}">${esc(phoneNice(c.phone))}</a>` : ''}</p>
+              ${o.wishes ? `<p class="muted">«${esc(o.wishes)}»</p>` : ''}
+              <small class="muted">${o.source === 'Сайт' ? 'с сайта · ' : ''}${ago(o.created_at)}</small></div>
+            <div class="lead-act">${c.phone ? `<a class="btn ghost sm" href="tel:+${phoneDigits(c.phone)}">${ic('phone')}Позвонить</a>` : ''}<button class="btn sm" data-confirm="${o.id}">${ic('check')}Подтвердить</button></div>
+          </div>`; }).join('')}</div>
       </section>` : ''}
 
       <section class="card">
@@ -110,7 +115,7 @@ export function render(){
         <div class="card-h"><h3>${ic('note')}Что происходит</h3></div>
         <div class="feed">${events.map(e => {
           const o = store.get('orders', e.order_id);
-          return `<a class="ev" href="${o ? '#/order/' + o.id : '#/today'}">${avatar(e.author_id, 'sm')}<span><b>${esc(pname(e.author_id) || 'Система')}</b> ${o ? `· №${o.num} ${esc(o.title)}` : ''}<p>${esc(e.text)}</p><small>${ago(e.created_at)}</small></span></a>`;
+          return `<a class="ev" href="${o ? '#/order/' + o.id : '#/today'}">${avatar(e.author_id, 'sm')}<span><b>${esc(e.type === 'client' ? 'Клиент' : pname(e.author_id) || 'Система')}</b> ${o ? `· №${o.num} ${esc(o.title)}` : ''}<p>${esc(e.text.replace(/^Клиент: /, ''))}</p><small>${ago(e.created_at)}</small></span></a>`;
         }).join('') || empty('Пока тихо')}</div>
       </section>
     </div>
@@ -144,15 +149,7 @@ export function bind(root){
   root.querySelector('#tasks-all').onclick = () => { allTasks = !allTasks; dispatchEvent(new Event('crm:render')); };
   root.querySelector('#task-add').onclick = () => taskForm();
   root.addEventListener('click', e => {
-    const tk = e.target.closest('[data-take]');
-    if (tk) {
-      const i = store.get('inbox', tk.dataset.take);
-      const cat = {'Зеркало':'mirror', 'Стол':'table', 'Дверь':'door', 'Кухня':'kitchen', 'Подоконник или откосы':'sill'}[i.kind] || 'other';
-      const wood = {'Карагач':'karagach', 'Чёрный орех':'walnut', 'Дуб':'oak', 'Сосна':'pine', 'Клён':'maple'}[i.wood] || '';
-      newOrder({inbox_id: i.id, name: i.name, phone: i.phone, city: i.city, cat, wood, size: i.size, source: 'Сайт',
-        title: i.model || `${i.kind || 'Изделие'} по заявке с сайта`, notes: i.msg});
-    }
-    const hd = e.target.closest('[data-hide]');
-    if (hd) { store.update('inbox', hd.dataset.hide, {handled: true}).catch(fail); toast('Заявка скрыта', () => store.update('inbox', hd.dataset.hide, {handled: false})); }
+    const cf = e.target.closest('[data-confirm]');
+    if (cf) moveStage(cf.dataset.confirm, 'calc');
   });
 }

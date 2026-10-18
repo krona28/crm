@@ -1,5 +1,6 @@
 // Общие кирпичики интерфейса: экранирование, иконки, всплывашки, окна, аватары, метки этапов.
 import {store} from './store.js';
+import {CLIENT_PAGE} from './config.js';
 import {stage, item, CATS, WOODS, daysTo, dshort, dmy, initials, isActive, money} from './const.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
@@ -107,8 +108,8 @@ export function fillTemplate(text, o){
   const c = store.get('clients', o?.client_id) || {};
   const paid = o ? paidSum(o.id) : 0, pre = Math.round((o?.price || 0) * store.settings.prepay / 100);
   const map = {
-    'имя': (c.name || '').split(' ')[0], 'изделие': (o?.title || '').replace(/^./, ch => ch.toLowerCase()), 'порода': (WOODS[o?.wood] || 'порода по согласованию').toLowerCase(),
-    'размер': o?.size || 'размер по согласованию', 'цена': money(o?.price), 'срок': o?.deadline ? dmy(o.deadline) : '—', 'номер': o?.num ?? '',
+    'имя': c.name || '', 'изделие': (o?.title || '').replace(/^./, ch => ch.toLowerCase()), 'порода': (WOODS[o?.wood] || 'порода по согласованию').toLowerCase(),
+    'размер': o?.size || 'размер по согласованию', 'цена': money(o?.price), 'срок': o?.deadline ? dmy(o.deadline) : '—', 'номер': o?.num ?? '', 'ссылка': o?.token ? CLIENT_PAGE + o.token : '',
     'предоплата': money(Math.max(0, pre - paid) || pre), 'остаток': money(Math.max(0, (o?.price || 0) - paid)),
   };
   return text.replace(/\{([^}]+)\}/g, (m, k) => map[k] ?? m);

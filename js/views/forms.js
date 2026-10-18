@@ -108,7 +108,6 @@ export function newOrder(pre = {}){
         delivery: '', source: v.source, notes: v.notes, pos: Date.now() / 1e10,
       });
       store.log(o.id, 'create', 'Заказ создан');
-      if (pre.inbox_id) store.update('inbox', pre.inbox_id, {handled: true});
       m.close();
       toast(`Заказ №${o.num} создан`);
       location.hash = `#/order/${o.id}`;

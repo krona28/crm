@@ -102,7 +102,7 @@ function shell(){
   $('#act-as')?.addEventListener('change', e => { store.actAs(e.target.value); shell(); render(); });
 }
 function navHtml(){
-  const inbox = store.t('inbox').filter(i => !i.handled).length;
+  const inbox = store.boss ? store.t('orders').filter(o => o.stage === 'lead').length : 0;
   const nav = NAV.filter(n => !n[3] || store.boss);
   $('#nav').innerHTML = nav.map(([id, name, icon]) => `<a href="#/${id}" class="${route.name === id || (id === 'orders' && route.name === 'order') || (id === 'clients' && route.name === 'client') ? 'on' : ''}">${ic(icon)}<span>${name}</span>${id === 'today' && inbox ? `<em>${inbox}</em>` : ''}</a>`).join('');
   const tab = ['today', 'orders', null, 'calendar', 'clients'];

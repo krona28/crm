@@ -5,7 +5,7 @@ import {DEFAULT_SETTINGS} from './const.js';
 import {seed} from './demo.js';
 
 const TABLES = ['profiles', 'designers', 'clients', 'orders', 'payments', 'tasks', 'events', 'photos', 'materials', 'inbox', 'settings'];
-const DEMO_KEY = 'krona-crm-demo-v1';
+const DEMO_KEY = 'krona-crm-demo-v2';
 const data = Object.fromEntries(TABLES.map(t => [t, []]));
 const subs = new Set();
 const urlCache = new Map();
@@ -24,7 +24,8 @@ function drop(t, id){ const k = key(t); data[t] = data[t].filter(r => r[k] !== i
 function saveDemo(){ try { localStorage.setItem(DEMO_KEY, JSON.stringify({data, me: demo.me})); } catch (e) { console.warn('Демо-данные не сохранились', e); } }
 
 export const store = {
-  mode: SUPABASE_URL && SUPABASE_KEY ? 'cloud' : 'demo',
+  // ?demo в адресе — посмотреть CRM на вымышленных данных, не трогая настоящую базу
+  mode: SUPABASE_URL && SUPABASE_KEY && !new URLSearchParams(location.search).has('demo') ? 'cloud' : 'demo',
   me: null,
   error: '',
   get role(){ return this.me?.role || 'pending'; },
@@ -122,6 +123,7 @@ export const store = {
     if (t === 'orders') {
       row.updated_at = row.stage_at = row.created_at;
       if (!row.num) row.num = Math.max(0, ...data.orders.map(o => o.num || 0)) + 1;
+      if (demo && !row.token) row.token = (uid() + uid()).replace(/-/g, '');
     }
     if (['tasks', 'events'].includes(t)) row[t === 'tasks' ? 'created_by' : 'author_id'] ??= this.me?.id;
     put(t, row); notify();

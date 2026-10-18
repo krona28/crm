@@ -67,6 +67,7 @@ export function seed(){
       deadline: due == null ? null : addDays(t0, due), started: price ? addDays(t0, start) : null, assignee_id: master,
       priority: i === 3 || i === 5, delivery: clients[ci - 1].city === 'Благовещенск' ? 'Самовывоз / доставка по городу' : 'Транспортная компания',
       source: clients[ci - 1].source, notes:'', pos: i, created_at: created, updated_at: at(-1), stage_at: at(st === 'coat' ? -2 : st === 'prep' ? -9 : -1)};
+    o.token = `demo${i}`.padEnd(32, '0'); o.wishes = ''; o.client_ok = null;
     orders.push(o);
     events.push({id:id('e'), order_id:o.id, author_id:'u-olga', type:'create', text:'Заказ создан', created_at: created});
     if (paid) {
@@ -75,6 +76,10 @@ export function seed(){
     }
   });
   orders[0].notes = 'Клиентка просила тон чуть светлее, чем у образца в мастерской.';
+  orders[3].client_ok = true;
+  orders[10].wishes = 'Хочу в гостиную, чтобы помещалось 8 человек. Можно ли ножки потемнее?';
+  orders[12].wishes = 'Хочу в спальню, можно ли чуть уже образца?';
+  orders[12].created_at = at(0, 9);
   orders[2].notes = 'Кромка с фаской 3 мм, покрытие — износостойкий лак для общепита.';
   orders[1].notes = 'Светлые прожилки заболони — по центру, как у образца.';
 
@@ -118,6 +123,7 @@ export function seed(){
     ['o-4','stage','Этап: Покрытие → Фото на одобрение','u-sergey',-1], ['o-4','note','Дизайнер просит отправить фото в дневном свете.','u-olga',0],
     ['o-6','pay','Оплата 26 600 ₽ — остаток','u-olga',-1], ['o-3','note','Кафе просит сдать до открытия летней веранды, не позже срока.','u-andrey',-4],
     ['o-12','note','Дизайнер прислала проект, нужно 3 зеркала + стойка.','u-olga',-3],
+    ['o-4','client','Клиент: всё нравится, можно упаковывать',null,0], ['o-13','client','Заявка с сайта от Ксении Беловой',null,0],
   ];
   E.forEach(([order_id, type, text, who, d]) => events.push({id:id('e'), order_id, type, text, author_id:who, created_at:at(d, 15)}));
 
@@ -128,10 +134,6 @@ export function seed(){
     ['pine','Доска','3000 × 200 × 50 мм',22,'шт',1400,'Склад'], ['maple','Доска','2000 × 120 × 25 мм',3,'шт',6200,'Стеллаж 2'],
   ].map(([wood, form, dims, qty, unit, cost, place, reserved_for]) => ({id:id('m'), wood, form, dims, qty, unit, cost, place, reserved_for: reserved_for || null, notes:'', created_at:at(-30)}));
 
-  const inbox = [
-    {id:id('i'), name:'Евгения', phone:'+79246677123', kind:'Зеркало', wood:'Карагач', model:'Напольное зеркало «Белла»', size:'', city:'Благовещенск', msg:'Хочу в спальню, можно ли чуть уже?', handled:false, created_at:at(0, 9)},
-    {id:id('i'), name:'Константин', phone:'+79145590220', kind:'Дверь', wood:'Дуб', model:'', size:'2 двери, 2000 × 800', city:'Владивосток', msg:'Две межкомнатные двери с рельефом, есть фото примера.', handled:false, created_at:at(-1, 20)},
-  ];
 
-  return {profiles, designers, clients, orders, payments, tasks, events, photos: [], materials, inbox, settings: []};
+  return {profiles, designers, clients, orders, payments, tasks, events, photos: [], materials, inbox: [], settings: []};
 }

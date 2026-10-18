@@ -4,7 +4,7 @@ import {esc, attr, ic, toast, fail, confirmBox, cname, pname, paidSum} from '../
 import {DEFAULT_SETTINGS, CATS, WOODS, stage} from '../const.js';
 
 export const title = 'Настройки';
-const KEYS = ['имя', 'изделие', 'порода', 'размер', 'цена', 'срок', 'номер', 'предоплата', 'остаток'];
+const KEYS = ['имя', 'изделие', 'порода', 'размер', 'цена', 'срок', 'номер', 'предоплата', 'остаток', 'ссылка'];
 
 export function render(){
   const s = store.settings;
