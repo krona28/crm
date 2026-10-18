@@ -17,14 +17,14 @@ function filtered(){
     (!q || `${o.num} ${o.title} ${cname(o.client_id)} ${o.size} ${o.notes}`.toLowerCase().includes(q)));
 }
 
-export function card(o){
+export function card(o, withStage = false){
   const tasks = store.t('tasks').filter(t => t.order_id === o.id && !t.done).length;
   const photos = store.t('photos').filter(p => p.order_id === o.id).length;
   return `<a class="ocard ${o.priority ? 'prio' : ''}" href="#/order/${o.id}" draggable="true" data-id="${o.id}">
     <div class="oc-top">${thumb(o)}<div class="grow">
       <div class="oc-num">№${o.num}${o.priority ? ` ${ic('star', 'star')}` : ''}</div>
       <b>${esc(o.title)}</b><small>${esc(cname(o.client_id))}</small></div></div>
-    <div class="oc-meta">${woodChip(o.wood)}${moneyLine(o)}</div>
+    <div class="oc-meta">${withStage ? stagePill(o.stage) : ''}${woodChip(o.wood)}${moneyLine(o)}</div>
     <div class="oc-foot">${due(o)}<span class="grow"></span>
       ${tasks ? `<span class="mini" title="Открытые задачи">${ic('check')}${tasks}</span>` : ''}${photos ? `<span class="mini" title="Фото">${ic('camera')}${photos}</span>` : ''}
       ${avatar(o.assignee_id, 'sm')}</div>
@@ -57,7 +57,8 @@ function table(list){
       <td class="muted">${o.num}</td><td><div class="cell-o">${thumb(o, 'xs')}<b>${esc(o.title)}</b>${o.priority ? ic('star', 'star') : ''}</div></td>
       <td>${esc(cname(o.client_id))}</td><td>${stagePill(o.stage)}</td><td>${avatar(o.assignee_id, 'sm')}</td><td>${due(o)}</td>
       ${store.boss ? `<td class="r">${o.price ? money(o.price) : '<span class="muted">—</span>'}</td><td class="r ${debt > 0 ? 'gold' : 'muted'}">${o.price ? (debt > 0 ? money(debt) : 'оплачен') : ''}</td>` : ''}
-    </tr>`; }).join('')}</tbody></table>${rows.length ? '' : empty('Ничего не нашлось', 'Попробуйте изменить фильтры.')}</div>`;
+    </tr>`; }).join('')}</tbody></table>${rows.length ? '' : empty('Ничего не нашлось', 'Попробуйте изменить фильтры.')}</div>
+    <div class="mlist">${rows.map(o => card(o, true)).join('') || empty('Ничего не нашлось', 'Попробуйте изменить фильтры.')}</div>`;
 }
 
 let seenRole = '';
@@ -72,6 +73,7 @@ export function render(){
     <select id="ow" aria-label="Мастер"><option value="">Все мастера</option>${staff.map(p => `<option value="${p.id}" ${f.who === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="none" ${f.who === 'none' ? 'selected' : ''}>Без мастера</option></select>
     <select id="oc" aria-label="Категория"><option value="">Все изделия</option>${Object.entries(CATS).map(([k, c]) => `<option value="${k}" ${f.cat === k ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
     <button class="chip ${f.archive ? 'on' : ''}" id="oa">Архив</button>
+    ${f.view === 'list' ? `<select id="os" class="m-sort" aria-label="Сортировка">${[['deadline', 'По сроку'], ['num', 'Новые'], ['stage', 'По этапу'], ['client', 'По клиенту'], ...(store.boss ? [['debt', 'По долгу']] : [])].map(([k, t]) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${t}</option>`).join('')}</select>` : ''}
     <span class="grow"></span>
     <div class="seg"><button class="${f.view === 'board' ? 'on' : ''}" data-v="board">${ic('board')}Доска</button><button class="${f.view === 'list' ? 'on' : ''}" data-v="list">${ic('list')}Список</button></div>
   </div>
@@ -86,6 +88,7 @@ export function bind(root){
   root.querySelector('#ow').onchange = e => set('who', e.target.value);
   root.querySelector('#oc').onchange = e => set('cat', e.target.value);
   root.querySelector('#oa').onclick = () => set('archive', !f.archive);
+  root.querySelector('#os')?.addEventListener('change', e => { f.sort = e.target.value; f.dir = ['num', 'debt'].includes(f.sort) ? -1 : 1; set('sort', f.sort); });
   root.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { f.view = b.dataset.v; savePref(); set('view', f.view); });
   root.addEventListener('click', e => {
     const th = e.target.closest('[data-sort]');
@@ -113,6 +116,6 @@ export function moveStage(id, to){
   const from = o.stage, patch = {stage: to};
   if (stage(to).group === 'work' && !o.started) patch.started = today();
   store.update('orders', id, patch).then(() => store.log(id, 'stage', `Этап: ${stage(from).name} → ${stage(to).name}`)).catch(fail);
-  toast(`№${o.num} → ${stage(to).name}`, () => store.update('orders', id, {stage: from}).catch(fail));
+  toast(`№${o.num} → ${stage(to).name}`, () => store.update('orders', id, {stage: from, started: o.started ?? null}).then(() => store.log(id, 'stage', `Этап вернули: ${stage(from).name}`)).catch(fail));
   if (to === 'board' && store.boss && o.price && paidSum(id) < o.price * store.settings.prepay / 100) setTimeout(() => toast('Внимание: предоплата ещё не получена'), 400);
 }

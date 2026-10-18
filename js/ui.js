@@ -51,7 +51,25 @@ export function toast(text, undo){
   if (undo) el.querySelector('button').onclick = () => { undo(); close(); };
   setTimeout(close, undo ? 6000 : 3200);
 }
-export const fail = e => { console.error(e); toast('Не сохранилось: ' + (e?.message || 'нет связи. Проверьте интернет')); };
+// понятный текст вместо технических ошибок базы и входа
+export function human(e){
+  const m = `${e?.code || ''} ${e?.message || e || ''}`;
+  const R = [
+    [/Failed to fetch|NetworkError|Load failed|network|fetch/i, 'нет связи с интернетом. Проверьте сеть и повторите'],
+    [/row-level security|42501|permission denied/i, 'не хватает прав. Это может сделать руководитель или менеджер'],
+    [/JWT|token is expired|refresh_token/i, 'сессия истекла. Обновите страницу и войдите заново'],
+    [/foreign key|23503/i, 'связанная запись уже удалена. Обновите страницу'],
+    [/duplicate key|23505/i, 'такая запись уже есть'],
+    [/too_many|rate limit|429/i, 'слишком много попыток подряд. Подождите минуту'],
+    [/Invalid login/i, 'неверная почта или пароль'],
+    [/already registered|already been registered/i, 'такая почта уже зарегистрирована. Нажмите «Забыли пароль?», если не помните его'],
+    [/Password should be|weak.?password/i, 'пароль слишком короткий: нужно не меньше 6 символов'],
+    [/Email not confirmed/i, 'почта не подтверждена. Откройте письмо от CRM и перейдите по ссылке'],
+    [/invalid.*email|validate email/i, 'проверьте адрес почты'],
+  ];
+  return R.find(([re]) => re.test(m))?.[1] || e?.message || 'что-то пошло не так. Повторите ещё раз';
+}
+export const fail = e => { console.error(e); toast('Не сохранилось: ' + human(e)); };
 
 // ── модальное окно / нижний лист на телефоне ──
 export function modal(html, {wide = false, onClose} = {}){

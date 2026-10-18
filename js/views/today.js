@@ -7,7 +7,7 @@ import {moveStage} from './orders.js';
 import {WOODS, phoneDigits} from '../const.js';
 
 export const title = 'Сегодня';
-let allTasks = false;
+let allTasks = false, attAll = false;
 
 function attention(){
   const pre = store.settings.prepay / 100, out = [];
@@ -23,8 +23,15 @@ function attention(){
     if (o.client_ok === false) out.push([1, o, 'wait', 'Клиент задал вопрос по фото']);
     if (o.client_ok === true && o.stage === 'approve') out.push([1, o, 'pay', 'Клиент одобрил — можно упаковывать']);
   }
-  return out.sort((a, b) => a[0] - b[0]);
+  // один заказ — одна строка со всеми пометками
+  const by = new Map();
+  for (const [p, o, k, t] of out) {
+    const g = by.get(o.id) || {p, o, flags: []};
+    g.p = Math.min(g.p, p); g.flags.push([k, t]); by.set(o.id, g);
+  }
+  return [...by.values()].sort((a, b) => a.p - b.p);
 }
+const canNotify = () => 'Notification' in window && Notification.permission === 'default' && store.mode === 'cloud';
 
 export function render(){
   const me = store.me, os = store.t('orders'), active = os.filter(isActive);
@@ -50,7 +57,7 @@ export function render(){
   }
 
   const tasks = store.t('tasks').filter(t => !t.done && (allTasks || t.assignee_id === me.id)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
-  const att = attention().filter(([, o]) => store.role !== 'master' || o.assignee_id === me.id);
+  const att = attention().filter(({o}) => store.role !== 'master' || o.assignee_id === me.id);
   const leads = store.role === 'master' ? [] : os.filter(o => o.stage === 'lead').sort((a, b) => b.created_at.localeCompare(a.created_at));
   const masters = store.t('profiles').filter(p => p.role === 'master' || (p.role === 'owner' && active.some(o => o.assignee_id === p.id && inWork(o))));
   const events = store.t('events').slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 12);
@@ -72,6 +79,7 @@ export function render(){
 
   <div class="cols">
     <div class="col">
+      ${store.boss && canNotify() ? `<button class="notify-ask" id="notify">${ic('inbox')}<span><b>Включите уведомления о заявках</b><small>CRM подаст сигнал, даже когда вкладка свёрнута</small></span>${ic('chevron')}</button>` : ''}
       ${leads.length ? `<section class="card leads-card">
         <div class="card-h"><h3>${ic('inbox')}Новые заявки <span class="count">${leads.length}</span></h3><span class="muted small">созвонитесь и подтвердите</span></div>
         <div class="list">${leads.map(o => { const c = store.get('clients', o.client_id) || {}; return `
@@ -86,11 +94,12 @@ export function render(){
       </section>` : ''}
 
       <section class="card">
-        <div class="card-h"><h3>${ic('flame')}Требует внимания</h3></div>
-        ${att.length ? `<div class="list">${att.slice(0, 9).map(([, o, k, t]) => `
-          <a class="row-it" href="#/order/${o.id}">${thumb(o, 'sm')}
+        <div class="card-h"><h3>${ic('flame')}Требует внимания${att.length ? ` <span class="count">${att.length}</span>` : ''}</h3></div>
+        ${att.length ? `<div class="list">${att.slice(0, attAll ? 99 : 8).map(({o, flags}) => `
+          <a class="row-it att" href="#/order/${o.id}">${thumb(o, 'sm')}
             <span class="grow"><b>№${o.num} ${esc(o.title)}</b><small>${esc(cname(o.client_id))} · ${esc(stage(o.stage).name)}</small></span>
-            <span class="flag f-${k}">${esc(t)}</span></a>`).join('')}</div>` : empty('Всё под контролем', 'Нет просрочек, зависших этапов и неотвеченных заявок.')}
+            <span class="flags">${flags.map(([k, t]) => `<span class="flag f-${k}">${esc(t)}</span>`).join('')}</span></a>`).join('')}</div>
+          ${att.length > 8 ? `<button class="linkbtn dim more" id="att-all">${attAll ? 'Свернуть' : `Показать все ${att.length}`}</button>` : ''}` : empty('Всё под контролем', 'Нет просрочек, зависших этапов и неотвеченных заявок.')}
       </section>
 
       <section class="card">
@@ -148,6 +157,12 @@ export function bind(root){
   bindTasks(root);
   root.querySelector('#tasks-all').onclick = () => { allTasks = !allTasks; dispatchEvent(new Event('crm:render')); };
   root.querySelector('#task-add').onclick = () => taskForm();
+  root.querySelector('#att-all')?.addEventListener('click', () => { attAll = !attAll; dispatchEvent(new Event('crm:render')); });
+  root.querySelector('#notify')?.addEventListener('click', async () => {
+    const r = await Notification.requestPermission();
+    toast(r === 'granted' ? 'Уведомления включены' : 'Уведомления запрещены в браузере. Их можно разрешить в настройках сайта');
+    dispatchEvent(new Event('crm:render'));
+  });
   root.addEventListener('click', e => {
     const cf = e.target.closest('[data-confirm]');
     if (cf) moveStage(cf.dataset.confirm, 'calc');

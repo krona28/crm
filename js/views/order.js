@@ -59,7 +59,7 @@ export function render({args: [id]}){
 
   <div class="o-grid">
     <div class="col">
-      <section class="card">
+      <section class="card sec-item">
         <div class="card-h"><h3>Изделие</h3></div>
         <div class="fields">
           <label class="f"><span class="lbl">Что</span>${sel('cat', Object.entries(CATS).map(([k, v]) => [k, v.name]), o.cat)}</label>
@@ -78,14 +78,14 @@ export function render({args: [id]}){
         ${it ? `<a class="site-link" href="https://krona28.github.io/collection/${it.id}/" target="_blank" rel="noopener">${ic('eye')}Образец «${esc(it.name)}» на сайте${it.size ? ` · ${esc(it.size)}` : ''}</a>` : ''}
       </section>
 
-      <section class="card">
+      <section class="card sec-photo">
         <div class="card-h"><h3>${ic('camera')}Фото <span class="count">${photos.length || ''}</span></h3>
           <div class="row gap"><label class="btn ghost sm">${ic('camera')}Снять / добавить<input type="file" accept="image/*" multiple id="up" hidden></label></div></div>
         ${photos.length ? `<div class="photos">${photos.map(p => `<button class="ph" data-ph="${p.id}"><img data-src="${p.id}" alt="${attr(p.caption)}">${p.for_client ? `<span class="ph-client" title="Видит клиент">${ic('eye')}</span>` : ''}<small>${ago(p.created_at)}</small></button>`).join('')}</div>`
           : `<label class="drop">${ic('camera')}<b>Добавьте фото процесса</b><span>Подбор доски, заготовки, готовое изделие — клиенту можно будет отправить прямо отсюда.</span><input type="file" accept="image/*" multiple id="up2" hidden></label>`}
       </section>
 
-      <section class="card">
+      <section class="card sec-hist">
         <div class="card-h"><h3>${ic('note')}История и комментарии</h3></div>
         <form class="comment" id="cmt"><textarea name="t" rows="1" placeholder="Комментарий: что сделано, что сказал клиент…"></textarea><button class="btn sm">Добавить</button></form>
         <div class="feed">${evs.map(e => `<div class="ev ev-${e.type}">${avatar(e.author_id, 'sm')}<span><b>${esc(e.type === 'client' ? 'Клиент' : pname(e.author_id) || 'Система')}</b><p>${esc(e.text.replace(/^Клиент: /, ''))}</p><small>${ago(e.created_at)}</small></span></div>`).join('')}</div>
@@ -97,6 +97,7 @@ export function render({args: [id]}){
         <div class="card-h"><h3>Клиент</h3>${c ? `<a class="linkbtn dim" href="#/client/${c.id}">Карточка</a>` : '<button class="linkbtn" id="set-client">Указать</button>'}</div>
         ${c ? `<b class="cl-name">${esc(c.name)}</b>
           <div class="muted">${esc([phoneNice(c.phone), c.city].filter(Boolean).join(' · '))}</div>
+          ${o.contact_name && o.contact_name !== c.name ? `<div class="small gold">В заявке представился: ${esc(o.contact_name)}</div>` : ''}
           ${des ? `<div class="muted small">через дизайнера: ${esc(des.name)}${des.studio ? ', ' + esc(des.studio) : ''}</div>` : ''}
           <div class="contact-btns">
             ${c.phone ? `<a class="btn ghost sm" href="tel:+${wa}">${ic('phone')}Позвонить</a><a class="btn ghost sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">${ic('wa')}WhatsApp</a>` : ''}
@@ -107,7 +108,7 @@ export function render({args: [id]}){
           ${c.phone ? `<div class="tpl"><span class="lbl">Написать по шаблону</span><div class="tpl-list">${tpl.map(t => `<button class="chip" data-tpl="${attr(t.id)}">${esc(t.name)}</button>`).join('')}</div></div>` : ''}` : '<p class="muted">Клиент не указан.</p>'}
       </section>
 
-      ${store.boss ? `<section class="card">
+      ${store.boss ? `<section class="card sec-money">
         <div class="card-h"><h3>${ic('ruble')}Деньги</h3><button class="btn sm" id="pay">${ic('plus')}Оплата</button></div>
         <div class="money-top">
           <label class="f"><span class="lbl">Цена</span><input data-f="price" data-num inputmode="numeric" value="${o.price || ''}" placeholder="0"></label>
@@ -120,12 +121,12 @@ export function render({args: [id]}){
         ${pays.length ? `<div class="pays">${pays.map(p => `<div class="pay"><span>${dmy(p.paid_on)}</span><span class="grow">${esc(PAY_KINDS[p.kind] || p.kind)}${p.method ? ' · ' + esc(p.method) : ''}${p.note ? ' · ' + esc(p.note) : ''}</span><b>${money(p.amount)}</b><button class="icon-btn xs" data-unpay="${p.id}" aria-label="Удалить оплату">${ic('x')}</button></div>`).join('')}</div>` : ''}
       </section>` : ''}
 
-      <section class="card">
+      <section class="card sec-tasks">
         <div class="card-h"><h3>${ic('check')}Задачи</h3><button class="icon-btn" id="task-add" aria-label="Добавить задачу">${ic('plus')}</button></div>
         ${tasks.length ? `<div class="list">${tasks.map(t => taskRow(t, true, false)).join('')}</div>` : '<p class="muted small">Нет задач по заказу.</p>'}
       </section>
 
-      ${mats.length ? `<section class="card"><div class="card-h"><h3>${ic('stock')}Отложено со склада</h3></div>
+      ${mats.length ? `<section class="card sec-mats"><div class="card-h"><h3>${ic('stock')}Отложено со склада</h3></div>
         <div class="list">${mats.map(m => `<a class="row-it" href="#/stock">${woodChip(m.wood)}<span class="grow">${esc(m.form)} ${esc(m.dims)}</span><b>${m.qty} ${esc(m.unit)}</b></a>`).join('')}</div></section>` : ''}
     </div>
   </div>

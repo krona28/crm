@@ -11,6 +11,12 @@ const subs = new Set();
 const urlCache = new Map();
 let sb = null, demo = null;
 let notifyTimer = 0;
+// цена и себестоимость лежат в отдельной таблице order_money (её видит только руководство);
+// пока supabase/03-hardening.sql не выполнен, они остаются в самих заказах
+let split = false;
+const MONEY = ['price', 'cost'];
+const pick = (o, keys) => Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]]));
+const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 const key = t => t === 'settings' ? 'key' : 'id';
@@ -21,6 +27,23 @@ function put(t, row){
   if (i < 0) list.push(row); else list[i] = {...list[i], ...row};
 }
 function drop(t, id){ const k = key(t); data[t] = data[t].filter(r => r[k] !== id); }
+// PostgREST отдаёт не больше 1000 строк за раз — читаем страницами
+async function fetchAll(t){
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const {data: page, error} = await sb.from(t).select('*').order(key(t)).range(from, from + 999);
+    if (error) throw error;
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
+}
+function putMoney(m){ const o = data.orders.find(x => x.id === m.order_id); if (o) Object.assign(o, pick(m, MONEY)); }
+async function saveMoney(order_id, patch){
+  if (!store.boss || !Object.keys(patch).length) return;
+  const o = data.orders.find(x => x.id === order_id) || {};
+  const {error} = await sb.from('order_money').upsert({order_id, price: +o.price || 0, cost: +o.cost || 0, ...patch});
+  if (error) throw error;
+}
 function saveDemo(){ try { localStorage.setItem(DEMO_KEY, JSON.stringify({data, me: demo.me})); } catch (e) { console.warn('Демо-данные не сохранились', e); } }
 
 export const store = {
@@ -72,22 +95,39 @@ export const store = {
     return 'ready';
   },
   async loadAll(){
+    const fails = [];
     await Promise.all(TABLES.map(async t => {
-      const {data: rows, error} = await sb.from(t).select('*').limit(10000);
-      if (!error) data[t] = rows;
+      try { data[t] = await fetchAll(t); } catch (e) { console.warn(t, e); fails.push(t); }
     }));
+    try {
+      const money = await fetchAll('order_money');
+      split = true;
+      for (const o of data.orders) { o.price = 0; o.cost = 0; }
+      money.forEach(putMoney);
+    } catch (e) {
+      // нет таблицы — база ещё старая; другая ошибка (сеть) — оставляем как было
+      if (/order_money|PGRST205|42P01/.test(`${e.code} ${e.message}`)) split = false; else fails.push('order_money');
+    }
+    this.error = fails.length ? 'Часть данных не загрузилась. Проверьте интернет.' : '';
+    this.lastLoad = Date.now();
     notify();
   },
   listen(){
     sb.channel('crm').on('postgres_changes', {event: '*', schema: 'public'}, p => {
+      if (p.table === 'order_money') { if (p.eventType !== 'DELETE') { putMoney(p.new); notify(); } return; }
       if (!TABLES.includes(p.table)) return;
+      if (p.table === 'orders' && p.eventType === 'INSERT' && !data.orders.some(o => o.id === p.new.id)) {
+        if (split) Object.assign(p.new, {price: 0, cost: 0});
+        if (p.new.stage === 'lead') dispatchEvent(new CustomEvent('crm:lead', {detail: p.new}));
+      }
       if (p.eventType === 'DELETE') drop(p.table, p.old[key(p.table)]);
       else put(p.table, p.new);
       if (p.table === 'profiles' && p.new?.id === this.me?.id) Object.assign(this.me, p.new);
       notify();
     }).subscribe();
-    // после сна телефона догружаем пропущенное
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadAll(); });
+    // после сна телефона догружаем пропущенное (не чаще раза в минуту)
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - this.lastLoad > 6e4) this.loadAll(); });
+    addEventListener('online', () => this.loadAll());
   },
   async signIn(email, password){
     const {data: r, error} = await sb.auth.signInWithPassword({email, password});
@@ -128,11 +168,13 @@ export const store = {
     if (['tasks', 'events'].includes(t)) row[t === 'tasks' ? 'created_by' : 'author_id'] ??= this.me?.id;
     put(t, row); notify();
     if (demo) { saveDemo(); return row; }
-    const send = {...row}; if (t === 'orders') delete send.num;
+    let send = {...row}; if (t === 'orders') delete send.num;
+    if (t === 'orders' && split) send = omit(send, MONEY);
     const {data: saved, error} = await sb.from(t).insert(send).select().single();
     if (error) { drop(t, row.id); notify(); throw error; }
+    if (t === 'orders' && split) { Object.assign(saved, {price: +row.price || 0, cost: +row.cost || 0}); await saveMoney(saved.id, pick(row, MONEY)).catch(e => console.warn(e)); }
     put(t, saved); notify();
-    return saved;
+    return data[t].find(r => r[key(t)] === saved[key(t)]);
   },
   async update(t, id, patch){
     const old = this.get(t, id); if (!old) return;
@@ -145,8 +187,15 @@ export const store = {
     put(t, {...old, ...patch}); notify();
     if (demo) { saveDemo(); return; }
     delete patch.updated_at; delete patch.stage_at;   // их ставит база
-    const {error} = await sb.from(t).update(patch).eq(key(t), id);
-    if (error) { put(t, before); notify(); throw error; }
+    try {
+      if (t === 'orders' && split) {
+        await saveMoney(id, pick(patch, MONEY));
+        patch = omit(patch, MONEY);
+        if (!Object.keys(patch).length) return;
+      }
+      const {error} = await sb.from(t).update(patch).eq(key(t), id);
+      if (error) throw error;
+    } catch (e) { put(t, before); notify(); throw e; }
   },
   async remove(t, id){
     const old = this.get(t, id);

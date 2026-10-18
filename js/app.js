@@ -1,6 +1,6 @@
 // Оболочка CRM: вход, меню, маршруты (#/orders, #/order/<id> …), поиск по Ctrl+K, живое обновление экранов.
 import {store} from './store.js';
-import {$, $$, esc, ic, toast, modal, avatar, stagePill, thumb, cname} from './ui.js';
+import {$, $$, esc, ic, toast, modal, avatar, stagePill, thumb, cname, human} from './ui.js';
 import {ROLES, phoneDigits} from './const.js';
 import * as today from './views/today.js';
 import * as orders from './views/orders.js';
@@ -65,7 +65,7 @@ function authScreen(kind = 'login', note = ''){
       if (st === 'confirm') return authScreen('login', 'Мы отправили письмо — подтвердите почту и войдите.');
       start(st);
     } catch (x) {
-      err.textContent = /Invalid login/.test(x.message) ? 'Неверная почта или пароль' : /already registered/.test(x.message) ? 'Такая почта уже зарегистрирована' : x.message;
+      const t = human(x); err.textContent = t[0].toUpperCase() + t.slice(1);
       err.hidden = false; btn.disabled = false;
     }
   });
@@ -92,6 +92,7 @@ function shell(){
       </header>
       ${store.mode === 'demo' ? `<div class="demo-bar">${ic('eye')}<span>Демо-режим: данные вымышленные и хранятся только в этом браузере.</span>
         <label>Смотреть как <select id="act-as">${store.t('profiles').map(p => `<option value="${p.id}" ${p.id === me.id ? 'selected' : ''}>${esc(p.name)} — ${ROLES[p.role]}</option>`).join('')}</select></label></div>` : ''}
+      <div class="net-bar" id="net" hidden>${ic('alert')}<span></span></div>
       <main id="view" tabindex="-1"></main>
     </div>
     <nav class="tabbar" id="tabbar"></nav>`;
@@ -100,9 +101,34 @@ function shell(){
   $('#me').onclick = meMenu;
   $('#menu').onclick = moreMenu;
   $('#act-as')?.addEventListener('change', e => { store.actAs(e.target.value); shell(); render(); });
+  netBar();
+}
+// полоса сверху: нет интернета или часть данных не загрузилась
+function netBar(){
+  const bar = $('#net'); if (!bar) return;
+  const text = !navigator.onLine ? 'Нет интернета. Изменения не сохранятся, пока связь не вернётся.' : store.error;
+  bar.hidden = !text; bar.querySelector('span').textContent = text || '';
+}
+addEventListener('online', netBar); addEventListener('offline', netBar);
+
+// новая заявка с сайта: всплывашка, звук и уведомление, если CRM свёрнута
+function newLead(o){
+  if (!store.boss) return;
+  const name = o.contact_name || store.get('clients', o.client_id)?.name || 'клиент';
+  toast(`Новая заявка: ${name} · ${o.title}`);
+  try {
+    const a = new AudioContext(), g = a.createGain(); g.connect(a.destination);
+    [880, 1320].forEach((f, i) => { const v = a.createOscillator(); v.frequency.value = f; v.connect(g); v.start(a.currentTime + i * .16); v.stop(a.currentTime + i * .16 + .14); });
+    g.gain.value = .06;
+  } catch (e) {}
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    const n = new Notification('Новая заявка с сайта', {body: `${name}: ${o.title}`, icon: 'icons/icon-192.png', tag: o.id});
+    n.onclick = () => { focus(); location.hash = `#/order/${o.id}`; n.close(); };
+  }
 }
 function navHtml(){
   const inbox = store.boss ? store.t('orders').filter(o => o.stage === 'lead').length : 0;
+  document.title = (inbox ? `(${inbox}) ` : '') + 'Крона · CRM';
   const nav = NAV.filter(n => !n[3] || store.boss);
   $('#nav').innerHTML = nav.map(([id, name, icon]) => `<a href="#/${id}" class="${route.name === id || (id === 'orders' && route.name === 'order') || (id === 'clients' && route.name === 'client') ? 'on' : ''}">${ic(icon)}<span>${name}</span>${id === 'today' && inbox ? `<em>${inbox}</em>` : ''}</a>`).join('');
   const tab = ['today', 'orders', null, 'calendar', 'clients'];
@@ -119,6 +145,7 @@ function render(){
   const V = VIEWS[route.name];
   $('#title').textContent = typeof V.title === 'function' ? V.title(route) : V.title;
   navHtml();
+  netBar();
   view.innerHTML = V.render(route);
   V.bind?.(view, route);
 }
@@ -205,6 +232,7 @@ function start(status){
   store.subscribe(refresh);
   window.addEventListener('hashchange', go);
   window.addEventListener('crm:render', refresh);
+  window.addEventListener('crm:lead', e => newLead(e.detail));
 }
 
 (async () => {

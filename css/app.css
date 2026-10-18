@@ -552,3 +552,31 @@ a.pay:hover{color:var(--ivory)}
 .switch input:checked+i::after{transform:translateX(16px)}
 .switch input:focus-visible+i{outline:2px solid var(--gold);outline-offset:2px}
 .lbl i{color:var(--dim)}
+
+/* ── доработки: уведомления, связь, телефон ── */
+.net-bar{display:flex;align-items:center;gap:10px;padding:9px 28px;font-size:.86rem;color:var(--late);background:rgba(228,128,106,.08);border-bottom:1px solid rgba(228,128,106,.3)}
+.notify-ask{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;margin-bottom:18px;border-radius:var(--r);border:1px dashed rgba(201,166,107,.45);background:var(--gold-bg);color:var(--gold-hi);transition:border-color .2s}
+.notify-ask:hover{border-color:var(--gold)}
+.notify-ask span{flex:1}
+.notify-ask b{display:block;font-weight:500;color:var(--ivory)}
+.notify-ask small{color:var(--muted)}
+.flags{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;max-width:55%}
+.more{display:block;margin:10px auto 0}
+.mlist,.m-sort{display:none}
+.mlist{flex-direction:column;gap:10px}
+.mlist .pill{font-size:.72rem}
+@media (max-width:1100px){
+  .o-grid{display:flex;flex-direction:column}
+  .o-grid>.col{display:contents}
+  .o-grid .client-card{order:1} .o-grid .sec-item{order:2} .o-grid .sec-money{order:3} .o-grid .sec-tasks{order:4}
+  .o-grid .sec-photo{order:5} .o-grid .sec-mats{order:6} .o-grid .sec-hist{order:7}
+}
+@media (max-width:760px){
+  .table-wrap{display:none}
+  .mlist{display:flex}
+  .m-sort{display:block;width:auto;flex:0 0 auto;min-height:36px;padding:.4em .8em;border-radius:999px;font-size:.84rem}
+  .row-it.att{flex-wrap:wrap}
+  .row-it.att .flags{max-width:none;flex:1 1 100%;justify-content:flex-start;padding-left:52px}
+  .net-bar{padding:8px 16px}
+}
+.hint-in{font-size:.78rem;color:var(--gold-hi)} .hint-in b{font-weight:500}

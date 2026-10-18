@@ -8,6 +8,7 @@ const staffOptions = (sel, roles = ['owner', 'manager', 'master']) => `<option v
 const opts = (list, sel) => list.map(([v, t]) => `<option value="${attr(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('');
 const designerOptions = sel => `<option value="">— без дизайнера —</option>` + store.t('designers').map(d => `<option value="${d.id}" ${d.id === sel ? 'selected' : ''}>${esc(d.name)}${d.studio ? ' · ' + esc(d.studio) : ''}</option>`).join('');
 const num = v => Number(String(v || '').replace(/\s/g, '').replace(',', '.')) || 0;
+const byPhone = p => { const d = phoneDigits(p); return d.length >= 10 ? store.t('clients').find(c => phoneDigits(c.phone) === d) : null; };
 
 // ── новый заказ ──
 export function newOrder(pre = {}){
@@ -22,7 +23,7 @@ export function newOrder(pre = {}){
         <div class="suggest" id="sug" hidden></div>
       </div>
       <div class="grid2" id="newc" ${c0 ? 'hidden' : ''}>
-        <label class="f"><span class="lbl">Телефон</span><input name="phone" type="tel" inputmode="tel" value="${attr(pre.phone || '')}" placeholder="+7 …"></label>
+        <label class="f"><span class="lbl">Телефон</span><input name="phone" id="nph" type="tel" inputmode="tel" value="${attr(pre.phone || '')}" placeholder="+7 …"><small class="hint-in" id="dup" hidden></small></label>
         <label class="f"><span class="lbl">Город</span><input name="city" value="${attr(pre.city || '')}" placeholder="Благовещенск"></label>
       </div>
 
@@ -85,6 +86,12 @@ export function newOrder(pre = {}){
     sug.hidden = !hits.length;
     sug.innerHTML = hits.map(c => `<button type="button" data-c="${c.id}"><b>${esc(c.name)}</b><small>${esc([phoneNice(c.phone), c.city].filter(Boolean).join(' · '))}</small></button>`).join('');
   };
+  const dup = f.querySelector('#dup');
+  f.querySelector('#nph').oninput = e => {
+    const c = byPhone(e.target.value);
+    dup.hidden = !c;
+    if (c) dup.innerHTML = `Этот номер уже у клиента <b>${esc(c.name)}</b>, заказ добавится к нему`;
+  };
   sug.onclick = e => {
     const b = e.target.closest('[data-c]'); if (!b) return;
     const c = store.get('clients', b.dataset.c);
@@ -97,6 +104,10 @@ export function newOrder(pre = {}){
     const v = Object.fromEntries(new FormData(f));
     try {
       let client_id = s.client_id;
+      // тот же телефон уже есть в базе — заказ к этому клиенту, без дубля
+      const twin = !client_id && byPhone(v.phone);
+      if (twin) { client_id = twin.id; toast(`Клиент с этим телефоном уже есть: ${twin.name}. Заказ добавлен к нему`); }
+      if (!client_id && v.phone && phoneDigits(v.phone).length < 10) { f.elements.phone.focus(); return toast('Проверьте телефон: нужно 10–11 цифр'); }
       if (!client_id && v.client_q.trim()) {
         const c = await store.insert('clients', {name: v.client_q.trim(), phone: v.phone, city: v.city, source: v.source, designer_id: v.designer_id || null, address: '', notes: ''});
         client_id = c.id;
@@ -137,6 +148,8 @@ export function clientForm(c = {}, after){
     e.preventDefault();
     const v = Object.fromEntries(new FormData(e.target));
     if ('designer_id' in v) v.designer_id = v.designer_id || null;
+    const twin = byPhone(v.phone);
+    if (twin && twin.id !== c.id) { m.close(); toast(`Этот телефон уже у клиента «${twin.name}»`); return after ? after(twin) : (location.hash = `#/client/${twin.id}`); }
     try {
       const r = c.id ? (await store.update('clients', c.id, v), c) : await store.insert('clients', v);
       m.close(); after?.(r);
