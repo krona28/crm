@@ -1,5 +1,5 @@
 // Оболочка CRM открывается мгновенно и без сети; данные всегда берутся свежие из базы.
-const CACHE = 'krona-crm-v1';
+const CACHE = 'krona-crm-v2';
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {

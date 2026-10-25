@@ -39,13 +39,13 @@ function authScreen(kind = 'login', note = ''){
         <p class="muted">Учётная запись <b>${esc(store.me?.email || '')}</b> создана. Руководитель должен открыть вам доступ в разделе «Команда» — после этого обновите страницу.</p>
         <div class="row gap"><button class="btn" onclick="location.reload()">Обновить</button><button class="btn ghost" id="out">Выйти</button></div>`
       : `
-        <h1>${kind === 'signup' ? 'Регистрация' : kind === 'reset' ? 'Новый пароль' : 'Вход в CRM'}</h1>
+        <h1>${kind === 'signup' ? 'Регистрация' : kind === 'reset' || kind === 'newpass' ? 'Новый пароль' : 'Вход в CRM'}</h1>
         ${note ? `<p class="note">${esc(note)}</p>` : ''}
         <form id="auth" class="stack">
           ${kind === 'signup' ? '<label class="f"><span>Как вас зовут</span><input name="name" required autocomplete="name" placeholder="Имя"></label>' : ''}
           ${kind !== 'newpass' ? '<label class="f"><span>Почта</span><input name="email" type="email" required autocomplete="email" placeholder="name@mail.ru"></label>' : ''}
-          ${kind !== 'reset' ? `<label class="f"><span>Пароль</span><input name="password" type="password" required minlength="6" autocomplete="${kind === 'login' ? 'current-password' : 'new-password'}"></label>` : ''}
-          <button class="btn wide">${kind === 'signup' ? 'Создать учётную запись' : kind === 'reset' ? 'Прислать ссылку' : kind === 'newpass' ? 'Сохранить пароль' : 'Войти'}</button>
+          ${kind !== 'reset' ? `<label class="f"><span>Пароль</span><input name="password" type="password" required minlength="6" autocomplete="${kind === 'login' ? 'current-password' : 'new-password'}"${kind === 'newpass' ? ' placeholder="Не меньше 6 символов"' : ''}></label>` : ''}
+          <button class="btn wide">${kind === 'signup' ? 'Создать учётную запись' : kind === 'reset' ? 'Прислать ссылку' : kind === 'newpass' ? 'Сохранить пароль и войти' : 'Войти'}</button>
           <p class="err" id="auth-err" hidden></p>
         </form>
         <div class="auth-links">
@@ -59,7 +59,7 @@ function authScreen(kind = 'login', note = ''){
     const f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('button'), err = $('#auth-err');
     btn.disabled = true; err.hidden = true;
     try {
-      if (kind === 'reset') { await store.resetPassword(f.email); return authScreen('login', 'Ссылка для смены пароля отправлена на почту.'); }
+      if (kind === 'reset') { await store.resetPassword(f.email); return authScreen('login', 'Письмо отправлено. Оно придёт от «Supabase Auth» на английском — нажмите в нём ссылку «Reset password» и придумайте новый пароль. Ссылка действует 1 час и открывается один раз.'); }
       if (kind === 'newpass') { await store.setPassword(f.password); location.hash = ''; return location.reload(); }
       const st = kind === 'signup' ? await store.signUp(f.name, f.email, f.password) : await store.signIn(f.email, f.password);
       if (st === 'confirm') return authScreen('login', 'Мы отправили письмо — подтвердите почту и войдите.');
@@ -237,6 +237,13 @@ function start(status){
 
 (async () => {
   try {
+    // ссылка из письма устарела или уже открывалась — Supabase возвращает ошибку в адресе
+    if (/error_code=|error=/.test(location.hash)) {
+      const expired = /otp_expired|expired|invalid/i.test(decodeURIComponent(location.hash));
+      history.replaceState(null, '', location.pathname + location.search);
+      await store.init();
+      return authScreen('reset', expired ? 'Ссылка из письма устарела или уже открывалась. Запросите новую — введите почту ещё раз.' : 'Не получилось открыть ссылку из письма. Запросите новую.');
+    }
     if (/type=recovery/.test(location.hash)) { await store.init(); return authScreen('newpass'); }
     start(await store.init());
     store.onAuth((ev) => { if (ev === 'PASSWORD_RECOVERY') authScreen('newpass'); if (ev === 'SIGNED_OUT') location.reload(); });
